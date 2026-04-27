@@ -1,0 +1,72 @@
+{
+  "name": "codex-quota-stats",
+  "displayName": "Codex Quota Stats",
+  "description": "Shows Codex token usage plus the official 5-hour and 7-day quota windows from your Codex auth state.",
+  "version": "0.0.8",
+  "publisher": "EddieGivens",
+  "icon": "images/icon.png",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "usage",
+    "tokens",
+    "quota",
+    "chatgpt",
+    "openai"
+  ],
+  "files": [
+    "extension.js",
+    "images/icon.png",
+    "LICENSE",
+    "README.md",
+    "scripts/read_codex_usage.py"
+  ],
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:localCodexStats.refresh",
+    "onCommand:localCodexStats.openCodexFolder"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "localCodexStats.refresh",
+        "title": "Codex Quota Stats: Refresh"
+      },
+      {
+        "command": "localCodexStats.openCodexFolder",
+        "title": "Codex Quota Stats: Open Codex Folder"
+      }
+    ],
+    "configuration": {
+      "title": "Codex Quota Stats",
+      "properties": {
+        "localCodexStats.updateInterval": {
+          "type": "number",
+          "default": 300,
+          "minimum": 30,
+          "description": "Refresh interval in seconds for local Codex usage stats."
+        },
+        "localCodexStats.pythonCommand": {
+          "type": "string",
+          "default": "python",
+          "description": "Python command used to run the bundled Codex usage reader."
+        },
+        "localCodexStats.codexHome": {
+          "type": "string",
+          "default": "",
+          "description": "Optional override for CODEX_HOME. Leave blank to use the current environment or ~/.codex."
+        }
+      }
+    }
+  }
+}

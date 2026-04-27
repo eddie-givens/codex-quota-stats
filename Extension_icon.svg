@@ -1,0 +1,12 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" fill="none">
+
+  <!-- Brain / Codex shape (re-centered and scaled) -->
+  <path d="M44 32C36 32 30 38 30 46C22 46 16 52 16 60C16 66 19 71 24 74C21 77 19 81 19 86C19 94 25 100 33 100H36C38 108 45 114 54 114C61 114 67 110 70 104C73 110 79 114 86 114C95 114 102 108 104 100H107C115 100 121 94 121 86C121 81 119 77 116 74C121 71 124 66 124 60C124 52 118 46 110 46C110 38 104 32 96 32C91 32 87 34 84 37C79 32 72 29 64 29C56 29 49 32 44 37C41 34 37 32 32 32Z" stroke="#007ACC" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <!-- Usage / signal line (centered with shape) -->
+  <path d="M32 78L50 62L64 70L82 56L100 66" stroke="#007ACC" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <!-- Status dot (pulled inward from edge) -->
+  <circle cx="92" cy="40" r="5" fill="#22c55e"></circle>
+
+</svg>
