@@ -5,6 +5,8 @@ combines local token history from your Codex state with the current 5-hour and
 7-day quota windows so you can see both token volume and quota pressure without
 leaving the editor.
 
+Repository: https://github.com/eddie-givens/codex-quota-stats
+
 ## What It Shows
 
 - compact token counts such as `42M` or `22.2K`
@@ -60,6 +62,9 @@ Install from the VS Code Marketplace, or install from a `.vsix` file:
   Python command used to run the bundled usage reader.
 - `localCodexStats.codexHome`
   Optional override for the Codex home directory.
+- `localCodexStats.accountId`
+  Optional ChatGPT account ID to send with quota requests. Leave blank to use
+  the active account in `~/.codex/auth.json`.
 
 ## Privacy
 
@@ -71,5 +76,7 @@ Install from the VS Code Marketplace, or install from a `.vsix` file:
 
 - If local token data does not appear, confirm that Codex has been used on that machine.
 - If quota percentages do not appear, confirm that `~/.codex/auth.json` exists and is current.
+- If quota data comes from the wrong ChatGPT account, set `localCodexStats.accountId`
+  to the desired account ID and refresh.
 - If Python is only available as `python3`, set `localCodexStats.pythonCommand` accordingly.
 - If the extension will not install, confirm that your VS Code version meets the minimum requirement.

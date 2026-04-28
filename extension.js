@@ -124,12 +124,15 @@ async function loadAuthData() {
             idPayload["https://api.openai.com/auth"] ||
             {};
         const profileClaims = accessPayload["https://api.openai.com/profile"] || {};
+        const configuredAccountId = getConfiguredAccountId();
+        const authAccountId = authJson?.tokens?.account_id || authClaims.chatgpt_account_id || null;
 
         return {
             email: idPayload.email || profileClaims.email || "Unknown",
             planType: authClaims.chatgpt_plan_type || "Unknown",
             accessToken: accessToken || null,
-            accountId: authJson?.tokens?.account_id || authClaims.chatgpt_account_id || null,
+            accountId: configuredAccountId || authAccountId,
+            accountIdSource: configuredAccountId ? "settings" : (authAccountId ? "auth.json" : "none"),
         };
     } catch (error) {
         console.error("Codex Quota Stats could not read auth.json:", error);
@@ -246,6 +249,11 @@ function getCodexHome() {
     return process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 }
 
+function getConfiguredAccountId() {
+    const config = vscode.workspace.getConfiguration("localCodexStats");
+    return String(config.get("accountId", "") || "").trim();
+}
+
 function updateStatusBar(authData, usageData, remoteUsageData, usageError, remoteUsageError) {
     const latestResponseTokens = usageData?.latest_response?.total_tokens || 0;
     const threadTokens = usageData?.current_thread?.tokens_used || 0;
@@ -285,6 +293,9 @@ function buildTooltip(authData, usageData, remoteUsageData, usageError, remoteUs
     if (authData) {
         tooltip.appendMarkdown(`- Email: ${escapeMarkdown(authData.email)}\n`);
         tooltip.appendMarkdown(`- Plan: ${escapeMarkdown(String(authData.planType).toUpperCase())}\n`);
+        if (authData.accountId) {
+            tooltip.appendMarkdown(`- Account ID: \`${escapeMarkdown(maskIdentifier(authData.accountId))}\` (${escapeMarkdown(formatAccountIdSource(authData.accountIdSource))})\n`);
+        }
     } else {
         tooltip.appendMarkdown("- Auth: No `auth.json` details available\n");
     }
@@ -486,6 +497,24 @@ function escapeMarkdown(value) {
         .replace(/`/g, "\\`")
         .replace(/\[/g, "\\[")
         .replace(/\]/g, "\\]");
+}
+
+function maskIdentifier(value) {
+    const text = String(value || "");
+    if (text.length <= 8) {
+        return text ? "*".repeat(text.length) : "";
+    }
+    return `${text.slice(0, 4)}...${text.slice(-4)}`;
+}
+
+function formatAccountIdSource(source) {
+    if (source === "settings") {
+        return "from setting";
+    }
+    if (source === "auth.json") {
+        return "from auth.json";
+    }
+    return "unknown source";
 }
 
 module.exports = {

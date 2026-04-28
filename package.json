@@ -6,6 +6,14 @@
   "publisher": "EddieGivens",
   "icon": "images/icon.png",
   "license": "MIT",
+  "homepage": "https://github.com/eddie-givens/codex-quota-stats#readme",
+  "bugs": {
+    "url": "https://github.com/eddie-givens/codex-quota-stats/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eddie-givens/codex-quota-stats.git"
+  },
   "keywords": [
     "codex",
     "usage",
@@ -14,6 +22,9 @@
     "chatgpt",
     "openai"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "files": [
     "extension.js",
     "images/icon.png",
@@ -65,6 +76,11 @@
           "type": "string",
           "default": "",
           "description": "Optional override for CODEX_HOME. Leave blank to use the current environment or ~/.codex."
+        },
+        "localCodexStats.accountId": {
+          "type": "string",
+          "default": "",
+          "description": "Optional ChatGPT account ID for quota requests. Leave blank to use the active account in Codex auth.json."
         }
       }
     }
