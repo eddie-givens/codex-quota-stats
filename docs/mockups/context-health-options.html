@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Quota Stats Context Health Mockups</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111315;
+      --panel: #1b1f23;
+      --panel-2: #22272d;
+      --line: #343b44;
+      --text: #e7edf3;
+      --muted: #9aa7b4;
+      --green: #73c991;
+      --yellow: #d7ba7d;
+      --red: #f48771;
+      --blue: #75beff;
+      --status: #007acc;
+      --shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 36%),
+        var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+
+    main {
+      width: min(1220px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 38px 0 56px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .subhead {
+      max-width: 860px;
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .option {
+      display: flex;
+      min-height: 800px;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .option-head {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .option-head h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .option-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .workspace {
+      display: flex;
+      min-height: 150px;
+      flex-direction: column;
+      justify-content: flex-end;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        #15181c;
+      background-size: 24px 24px;
+    }
+
+    .editor {
+      flex: 1;
+      padding: 16px 18px;
+      color: #73808f;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: 28px;
+      padding: 0 10px;
+      background: var(--status);
+      color: #fff;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .status-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 3px;
+    }
+
+    .status-item.warn {
+      background: rgba(215, 186, 125, 0.18);
+      color: #fff4d2;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .tooltip {
+      margin: 18px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #202428;
+    }
+
+    .tooltip.compact {
+      min-height: 360px;
+    }
+
+    .tooltip h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .tooltip h4 {
+      margin: 18px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 7px 0;
+    }
+
+    .row span:first-child {
+      color: var(--muted);
+    }
+
+    .value {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .meter {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #111519;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .fill.warn {
+      background: var(--yellow);
+    }
+
+    .callout {
+      margin: 12px 0 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--yellow);
+      border-radius: 4px;
+      background: rgba(215, 186, 125, 0.12);
+      color: #f6e8bd;
+      font-size: 13px;
+    }
+
+    .link-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .link-button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid rgba(117, 190, 255, 0.52);
+      border-radius: 4px;
+      color: var(--blue);
+      background: rgba(117, 190, 255, 0.08);
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .muted-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mini-panel {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .mini-panel strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .mini-panel span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .details {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .choice-note {
+      margin: auto 18px 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .option {
+        min-height: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Bars First, Numbers On Demand</h1>
+    <p class="subhead">
+      The hover leads with context and quota bars, then offers a clear "Show all numbers" command link.
+      In VS Code this would be a trusted Markdown command link rather than a native button.
+    </p>
+
+    <section class="grid" aria-label="Context health mockup options">
+      <article class="option">
+        <div class="option-head">
+          <h2>A. Compact Default</h2>
+          <p>Default hover is calm: bars, warning note, and a command link for people who want the raw numbers.</p>
+        </div>
+        <div class="workspace">
+          <div class="editor">// default hover<br>numbers are available one click away<br>warning is informational</div>
+          <div class="status-bar">
+            <div class="status-item warn"><span class="dot"></span>$(graph) 240.1K tok | ctx 93% | quota 42%/58%</div>
+          </div>
+        </div>
+        <div class="tooltip compact">
+          <h3>Codex Quota Stats</h3>
+
+          <h4>Context</h4>
+          <div class="row"><span>Current thread</span><strong class="value">93%</strong></div>
+          <div class="meter"><div class="fill warn" style="width: 93%"></div></div>
+
+          <h4>Quota</h4>
+          <div class="row"><span>5-hour window</span><strong class="value">42%</strong></div>
+          <div class="meter"><div class="fill" style="width: 42%"></div></div>
+          <div class="row"><span>7-day window</span><strong class="value">58%</strong></div>
+          <div class="meter"><div class="fill" style="width: 58%"></div></div>
+
+          <div class="callout">Context is in the warning range. Codex cleanup can keep this thread usable; this is just visibility.</div>
+
+          <div class="link-row">
+            <a class="link-button">$(list-unordered) Show all numbers</a>
+            <span class="muted-link">$(settings-gear) Settings</span>
+          </div>
+        </div>
+        <p class="choice-note">Best default: strong signal, little clutter, no loss of detail.</p>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <h2>B. Expanded Numbers</h2>
+          <p>What the hover looks like after selecting "Show all numbers"; the link flips to "Hide numbers".</p>
+        </div>
+        <div class="workspace">
+          <div class="editor">// after command link<br>same hover structure<br>raw values are restored below bars</div>
+          <div class="status-bar">
+            <div class="status-item warn"><span class="dot"></span>$(graph) 240.1K tok | ctx 93% | quota 42%/58%</div>
+          </div>
+        </div>
+        <div class="tooltip">
+          <h3>Codex Quota Stats</h3>
+
+          <div class="two-col">
+            <div class="mini-panel"><strong>93%</strong><span>Context used</span></div>
+            <div class="mini-panel"><strong>18.3K</strong><span>Estimated room</span></div>
+            <div class="mini-panel"><strong>42%</strong><span>5-hour quota</span></div>
+            <div class="mini-panel"><strong>58%</strong><span>7-day quota</span></div>
+          </div>
+
+          <div class="details">
+            <h4>Context Numbers</h4>
+            <div class="row"><span>Model</span><span class="value">gpt-5.5</span></div>
+            <div class="row"><span>Thread tokens</span><span class="value">240.1K (240,064)</span></div>
+            <div class="row"><span>Context window</span><span class="value">272K</span></div>
+            <div class="row"><span>Effective context</span><span class="value">258.4K (95%)</span></div>
+
+            <h4>Response Numbers</h4>
+            <div class="row"><span>Total tokens</span><span class="value">78.1K (78,149)</span></div>
+            <div class="row"><span>Input tokens</span><span class="value">78.1K (78,083)</span></div>
+            <div class="row"><span>Cached input</span><span class="value">77.2K (77,184)</span></div>
+            <div class="row"><span>Output tokens</span><span class="value">66</span></div>
+
+            <h4>Window Numbers</h4>
+            <div class="row"><span>Local 5 hours</span><span class="value">1.7M across 16 responses</span></div>
+            <div class="row"><span>Local 7 days</span><span class="value">5.3M across 72 responses</span></div>
+          </div>
+
+          <div class="link-row">
+            <a class="link-button">$(chevron-up) Hide numbers</a>
+            <span class="muted-link">$(refresh) Refresh</span>
+          </div>
+        </div>
+        <p class="choice-note">Best if users will often inspect exact values after seeing the bars.</p>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <h2>C. Separate Details Action</h2>
+          <p>Hover stays compact; the link opens a richer details command instead of expanding the hover.</p>
+        </div>
+        <div class="workspace">
+          <div class="editor">// alternate implementation<br>hover stays compact<br>details open in command output or quick view</div>
+          <div class="status-bar">
+            <div class="status-item warn"><span class="dot"></span>$(warning) ctx 93% | quota 42%/58%</div>
+          </div>
+        </div>
+        <div class="tooltip compact">
+          <h3>Codex Quota Stats</h3>
+
+          <h4>Context</h4>
+          <div class="row"><span>Current thread</span><strong class="value">93%</strong></div>
+          <div class="meter"><div class="fill warn" style="width: 93%"></div></div>
+
+          <h4>Quota</h4>
+          <div class="row"><span>5-hour window</span><strong class="value">42%</strong></div>
+          <div class="meter"><div class="fill" style="width: 42%"></div></div>
+          <div class="row"><span>7-day window</span><strong class="value">58%</strong></div>
+          <div class="meter"><div class="fill" style="width: 58%"></div></div>
+
+          <div class="callout">Context warning only. Cleanup and compaction may keep quality high.</div>
+
+          <div class="link-row">
+            <a class="link-button">$(go-to-file) Open details</a>
+            <span class="muted-link">$(refresh) Refresh</span>
+          </div>
+        </div>
+        <p class="choice-note">Best if we want a very clean hover and do not mind adding a separate command surface.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

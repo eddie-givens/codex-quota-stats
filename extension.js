@@ -9,14 +9,18 @@ const vscode = require("vscode");
 
 const REMOTE_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const REMOTE_ORIGINATOR = "codex_vscode";
+const SHOW_NUMBERS_COMMAND = "localCodexStats.showNumbers";
+const LEGACY_TOGGLE_NUMBERS_COMMAND = "localCodexStats.toggleNumbers";
 const USAGE_LEVELS = {
-    healthy: { label: "Healthy", color: "#73c991" },
-    warning: { label: "Watch", color: "#cca700" },
-    danger: { label: "High", color: "#f14c4c" },
+    healthy: { label: "Healthy", color: "#73c991", severity: 0 },
+    warning: { label: "Watch", color: "#cca700", severity: 1 },
+    danger: { label: "High", color: "#f14c4c", severity: 2 },
 };
 
 let statusBarItem;
 let updateTimer;
+let detailedNumbersPanel;
+let latestSnapshot = null;
 
 function activate(context) {
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -34,6 +38,12 @@ function activate(context) {
         const codexHome = getCodexHome();
         await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(codexHome));
     }));
+
+    const showNumbers = async () => {
+        await showDetailedNumbersPanel();
+    };
+    context.subscriptions.push(vscode.commands.registerCommand(SHOW_NUMBERS_COMMAND, showNumbers));
+    context.subscriptions.push(vscode.commands.registerCommand(LEGACY_TOGGLE_NUMBERS_COMMAND, showNumbers));
 
     context.subscriptions.push({
         dispose() {
@@ -61,6 +71,10 @@ function deactivate() {
     if (statusBarItem) {
         statusBarItem.dispose();
     }
+    if (detailedNumbersPanel) {
+        detailedNumbersPanel.dispose();
+        detailedNumbersPanel = undefined;
+    }
 }
 
 function startAutoRefresh() {
@@ -82,25 +96,83 @@ async function refreshStats() {
     statusBarItem.tooltip = "Refreshing Codex Quota Stats...";
 
     try {
-        const authData = await loadAuthData();
-        const [usageResult, remoteUsageResult] = await Promise.allSettled([
-            readUsageSnapshot(),
-            fetchRemoteUsage(authData),
-        ]);
-        const usageData = usageResult.status === "fulfilled" ? usageResult.value : null;
-        const remoteUsageData = remoteUsageResult.status === "fulfilled" ? remoteUsageResult.value : null;
-        const usageError = usageResult.status === "rejected" ? usageResult.reason : null;
-        const remoteUsageError = remoteUsageResult.status === "rejected" ? remoteUsageResult.reason : null;
+        const snapshot = await collectStatsSnapshot();
+        latestSnapshot = snapshot;
+        const { authData, usageData, remoteUsageData, usageError, remoteUsageError } = snapshot;
 
         if (!usageData && !remoteUsageData) {
             showFetchError(authData, usageError, remoteUsageError);
+            updateDetailedNumbersPanel(snapshot);
             return;
         }
 
         updateStatusBar(authData, usageData, remoteUsageData, usageError, remoteUsageError);
+        updateDetailedNumbersPanel(snapshot);
     } catch (error) {
         showUpdateError(error);
     }
+}
+
+async function collectStatsSnapshot() {
+    const authData = await loadAuthData();
+    const [usageResult, remoteUsageResult] = await Promise.allSettled([
+        readUsageSnapshot(),
+        fetchRemoteUsage(authData),
+    ]);
+
+    return {
+        authData,
+        usageData: usageResult.status === "fulfilled" ? usageResult.value : null,
+        remoteUsageData: remoteUsageResult.status === "fulfilled" ? remoteUsageResult.value : null,
+        usageError: usageResult.status === "rejected" ? usageResult.reason : null,
+        remoteUsageError: remoteUsageResult.status === "rejected" ? remoteUsageResult.reason : null,
+    };
+}
+
+async function showDetailedNumbersPanel() {
+    let snapshot = latestSnapshot;
+    if (!snapshot) {
+        try {
+            snapshot = await collectStatsSnapshot();
+            latestSnapshot = snapshot;
+        } catch (error) {
+            await vscode.window.showErrorMessage(`Codex Quota Stats could not load usage numbers: ${getErrorMessage(error)}`);
+            return;
+        }
+    }
+
+    const columnToShowIn = vscode.window.activeTextEditor?.viewColumn || vscode.ViewColumn.One;
+    if (detailedNumbersPanel) {
+        detailedNumbersPanel.reveal(columnToShowIn);
+    } else {
+        detailedNumbersPanel = vscode.window.createWebviewPanel(
+            "codexQuotaNumbers",
+            "Codex Quota Numbers",
+            columnToShowIn,
+            {
+                enableScripts: false,
+                retainContextWhenHidden: true,
+            }
+        );
+        detailedNumbersPanel.onDidDispose(() => {
+            detailedNumbersPanel = undefined;
+        });
+    }
+
+    updateDetailedNumbersPanel(snapshot);
+}
+
+function updateDetailedNumbersPanel(snapshot) {
+    if (!detailedNumbersPanel || !snapshot) {
+        return;
+    }
+    detailedNumbersPanel.webview.html = buildDetailedNumbersHtml(
+        snapshot.authData,
+        snapshot.usageData,
+        snapshot.remoteUsageData,
+        snapshot.usageError,
+        snapshot.remoteUsageError
+    );
 }
 
 async function loadAuthData() {
@@ -260,11 +332,15 @@ function updateStatusBar(authData, usageData, remoteUsageData, usageError, remot
     const displayValue = latestResponseTokens || threadTokens;
     const primaryWindow = remoteUsageData?.rate_limit?.primary_window || null;
     const secondaryWindow = remoteUsageData?.rate_limit?.secondary_window || null;
-    const usageLevel = getUsageLevel(remoteUsageData);
+    const contextHealth = getContextHealth(usageData);
+    const usageLevel = getUsageLevel(remoteUsageData, contextHealth);
     const parts = [];
 
     if (displayValue > 0) {
         parts.push(`${formatCompactNumber(displayValue)} tok`);
+    }
+    if (contextHealth) {
+        parts.push(`ctx ${contextHealth.percent}%`);
     }
     if (primaryWindow && secondaryWindow) {
         parts.push(`${primaryWindow.used_percent}%/${secondaryWindow.used_percent}%`);
@@ -283,42 +359,46 @@ function buildTooltip(authData, usageData, remoteUsageData, usageError, remoteUs
     const tooltip = new vscode.MarkdownString();
     tooltip.isTrusted = true;
     tooltip.supportThemeIcons = true;
-    const usageLevel = getUsageLevel(remoteUsageData);
+    tooltip.supportHtml = true;
+    const contextHealth = getContextHealth(usageData);
+    const usageLevel = getUsageLevel(remoteUsageData, contextHealth);
 
     tooltip.appendMarkdown("## Codex Quota Stats\n\n");
-    tooltip.appendMarkdown(`- Source: Local Codex SQLite files in \`${escapeMarkdown(getCodexHome())}\`\n`);
-    if (remoteUsageData) {
-        tooltip.appendMarkdown(`- Quota source: \`${escapeMarkdown(REMOTE_USAGE_URL)}\`\n`);
-    }
-    if (authData) {
-        tooltip.appendMarkdown(`- Email: ${escapeMarkdown(authData.email)}\n`);
-        tooltip.appendMarkdown(`- Plan: ${escapeMarkdown(String(authData.planType).toUpperCase())}\n`);
-        if (authData.accountId) {
-            tooltip.appendMarkdown(`- Account ID: \`${escapeMarkdown(maskIdentifier(authData.accountId))}\` (${escapeMarkdown(formatAccountIdSource(authData.accountIdSource))})\n`);
-        }
-    } else {
-        tooltip.appendMarkdown("- Auth: No `auth.json` details available\n");
-    }
-
-    tooltip.appendMarkdown("\n### Rate Limits\n\n");
     tooltip.appendMarkdown(`- Status: ${escapeMarkdown(usageLevel.label)}\n`);
+
+    appendContextSummary(tooltip, contextHealth, usageError);
+    appendQuotaSummary(tooltip, remoteUsageData, remoteUsageError, authData);
+
+    tooltip.appendMarkdown(`\n[Show numbers](command:${SHOW_NUMBERS_COMMAND})`);
+    tooltip.appendMarkdown(" | [Refresh](command:localCodexStats.refresh) | [Settings](command:workbench.action.openSettings?%22localCodexStats%22)\n");
+
+    tooltip.appendMarkdown("\n> This extension reads local Codex SQLite usage and, when `auth.json` is present, the same `/wham/usage` quota endpoint the official OpenAI VS Code extension uses.\n");
+    return tooltip;
+}
+
+function appendContextSummary(tooltip, contextHealth, usageError) {
+    tooltip.appendMarkdown("\n### Context\n\n");
+    if (contextHealth) {
+        tooltip.appendMarkdown(`- Current context: ${contextHealth.percent}% used ${formatUsageBar(contextHealth.percent, contextHealth.level, "Context usage")}\n`);
+        tooltip.appendMarkdown(`- Effective window: ${formatUsageNumber(contextHealth.effectiveLimit)}\n`);
+        if (contextHealth.level !== USAGE_LEVELS.healthy) {
+            tooltip.appendMarkdown("- Context is in the warning range. Codex cleanup may keep the thread usable; this is visibility, not a reset recommendation.\n");
+        }
+    } else if (usageError) {
+        tooltip.appendMarkdown(`- Context data unavailable: ${escapeMarkdown(getErrorMessage(usageError))}\n`);
+    } else {
+        tooltip.appendMarkdown("- Context window data unavailable\n");
+    }
+}
+
+function appendQuotaSummary(tooltip, remoteUsageData, remoteUsageError, authData) {
+    tooltip.appendMarkdown("\n### Quota\n\n");
     if (remoteUsageData?.rate_limit?.primary_window && remoteUsageData?.rate_limit?.secondary_window) {
         const primaryWindow = remoteUsageData.rate_limit.primary_window;
         const secondaryWindow = remoteUsageData.rate_limit.secondary_window;
-        tooltip.appendMarkdown(`- Last 5 hours: ${formatPercent(primaryWindow.used_percent)} used, resets ${escapeMarkdown(formatReset(primaryWindow.reset_at, primaryWindow.reset_after_seconds))}\n`);
-        tooltip.appendMarkdown(`- Last 7 days: ${formatPercent(secondaryWindow.used_percent)} used, resets ${escapeMarkdown(formatReset(secondaryWindow.reset_at, secondaryWindow.reset_after_seconds))}\n`);
+        tooltip.appendMarkdown(`- Last 5 hours: ${formatPercent(primaryWindow.used_percent)} used ${formatUsageBar(primaryWindow.used_percent, getContextLevel(primaryWindow.used_percent), "Last 5 hours usage")}\n`);
+        tooltip.appendMarkdown(`- Last 7 days: ${formatPercent(secondaryWindow.used_percent)} used ${formatUsageBar(secondaryWindow.used_percent, getContextLevel(secondaryWindow.used_percent), "Last 7 days usage")}\n`);
         tooltip.appendMarkdown(`- Allowed: ${remoteUsageData.rate_limit.allowed ? "yes" : "no"}\n`);
-        if (remoteUsageData.additional_rate_limits?.length) {
-            tooltip.appendMarkdown("\n#### Additional Limits\n\n");
-            for (const entry of remoteUsageData.additional_rate_limits) {
-                const extraPrimary = entry?.rate_limit?.primary_window;
-                const extraSecondary = entry?.rate_limit?.secondary_window;
-                if (!extraPrimary || !extraSecondary) {
-                    continue;
-                }
-                tooltip.appendMarkdown(`- ${escapeMarkdown(entry.limit_name || entry.metered_feature || "extra")}: ${formatPercent(extraPrimary.used_percent)} / ${formatPercent(extraSecondary.used_percent)}\n`);
-            }
-        }
     } else if (remoteUsageError) {
         tooltip.appendMarkdown(`- Remote quota data unavailable: ${escapeMarkdown(getErrorMessage(remoteUsageError))}\n`);
     } else if (authData?.accessToken) {
@@ -326,46 +406,231 @@ function buildTooltip(authData, usageData, remoteUsageData, usageError, remoteUs
     } else {
         tooltip.appendMarkdown("- No access token available for remote quota data\n");
     }
+}
 
-    tooltip.appendMarkdown("\n### Current Thread\n\n");
+function buildDetailedNumbersHtml(authData, usageData, remoteUsageData, usageError, remoteUsageError) {
+    const contextHealth = getContextHealth(usageData);
+    const usageLevel = getUsageLevel(remoteUsageData, contextHealth);
+    const sections = [
+        buildDetailSection("Account", getAccountRows(authData)),
+        buildDetailSection("Context Numbers", getContextNumberRows(contextHealth)),
+        buildDetailSection("Rate Limits", getRateLimitRows(authData, remoteUsageData, remoteUsageError, usageLevel)),
+        buildDetailSection("Current Thread", getCurrentThreadRows(usageData, usageError)),
+        buildDetailSection("Latest Response", getLatestResponseRows(usageData, usageError)),
+        buildDetailSection("Local Token Windows", getLocalTokenWindowRows(usageData, usageError)),
+        buildDetailSection("Sources", getSourceRows(authData)),
+    ].join("\n");
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex Quota Numbers</title>
+    <style>
+        body {
+            margin: 0;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            line-height: 1.45;
+        }
+
+        main {
+            box-sizing: border-box;
+            max-width: 920px;
+            padding: 24px 32px 40px;
+        }
+
+        h1 {
+            margin: 0 0 4px;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: 0;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0;
+        }
+
+        .summary {
+            margin: 0 0 22px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        section {
+            border-top: 1px solid var(--vscode-panel-border);
+            padding: 18px 0;
+        }
+
+        dl {
+            margin: 0;
+        }
+
+        .detail-row {
+            display: grid;
+            grid-template-columns: minmax(160px, 260px) 1fr;
+            gap: 16px;
+            padding: 6px 0;
+        }
+
+        dt {
+            color: var(--vscode-descriptionForeground);
+        }
+
+        dd {
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 640px) {
+            main {
+                padding: 18px 20px 32px;
+            }
+
+            .detail-row {
+                grid-template-columns: 1fr;
+                gap: 2px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Codex Quota Numbers</h1>
+        <p class="summary">Status: ${escapeHtml(usageLevel.label)} - Updated ${escapeHtml(new Date().toLocaleString())}</p>
+        ${sections}
+    </main>
+</body>
+</html>`;
+}
+
+function buildDetailSection(title, rows) {
+    return `<section>
+    <h2>${escapeHtml(title)}</h2>
+    <dl>
+        ${rows.map(([label, value]) => `<div class="detail-row"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("\n        ")}
+    </dl>
+</section>`;
+}
+
+function getAccountRows(authData) {
+    if (!authData) {
+        return [["Auth", "No auth.json details available"]];
+    }
+
+    const rows = [
+        ["Email", authData.email || "Unknown"],
+        ["Plan", String(authData.planType || "Unknown").toUpperCase()],
+    ];
+    if (authData.accountId) {
+        rows.push(["Account ID", `${maskIdentifier(authData.accountId)} (${formatAccountIdSource(authData.accountIdSource)})`]);
+    }
+    return rows;
+}
+
+function getContextNumberRows(contextHealth) {
+    if (!contextHealth) {
+        return [["Context window", "Data unavailable"]];
+    }
+
+    return [
+        ["Current context tokens", formatUsageNumber(contextHealth.usedTokens)],
+        ["Context window", formatUsageNumber(contextHealth.contextWindow)],
+        ["Effective window", `${formatUsageNumber(contextHealth.effectiveLimit)} (${formatPercent(contextHealth.effectivePercent)})`],
+        ["Remaining estimate", formatUsageNumber(contextHealth.remainingTokens)],
+    ];
+}
+
+function getRateLimitRows(authData, remoteUsageData, remoteUsageError, usageLevel) {
+    const rows = [["Status", usageLevel.label]];
+    if (remoteUsageData?.rate_limit?.primary_window && remoteUsageData?.rate_limit?.secondary_window) {
+        const primaryWindow = remoteUsageData.rate_limit.primary_window;
+        const secondaryWindow = remoteUsageData.rate_limit.secondary_window;
+        rows.push(
+            ["Last 5 hours", `${formatPercent(primaryWindow.used_percent)} used, resets ${formatReset(primaryWindow.reset_at, primaryWindow.reset_after_seconds)}`],
+            ["Last 7 days", `${formatPercent(secondaryWindow.used_percent)} used, resets ${formatReset(secondaryWindow.reset_at, secondaryWindow.reset_after_seconds)}`],
+            ["Allowed", remoteUsageData.rate_limit.allowed ? "yes" : "no"]
+        );
+        if (remoteUsageData.additional_rate_limits?.length) {
+            for (const entry of remoteUsageData.additional_rate_limits) {
+                const extraPrimary = entry?.rate_limit?.primary_window;
+                const extraSecondary = entry?.rate_limit?.secondary_window;
+                if (!extraPrimary || !extraSecondary) {
+                    continue;
+                }
+                rows.push([
+                    entry.limit_name || entry.metered_feature || "Additional limit",
+                    `${formatPercent(extraPrimary.used_percent)} / ${formatPercent(extraSecondary.used_percent)}`,
+                ]);
+            }
+        }
+    } else if (remoteUsageError) {
+        rows.push(["Remote quota data", getErrorMessage(remoteUsageError)]);
+    } else if (authData?.accessToken) {
+        rows.push(["Remote quota data", "Unavailable"]);
+    } else {
+        rows.push(["Remote quota data", "No access token available"]);
+    }
+    return rows;
+}
+
+function getCurrentThreadRows(usageData, usageError) {
     if (usageData?.current_thread) {
-        tooltip.appendMarkdown(`- Title: ${escapeMarkdown(trimText(usageData.current_thread.title, 100))}\n`);
-        tooltip.appendMarkdown(`- Model: ${escapeMarkdown(usageData.current_thread.model || "unknown")}\n`);
-        tooltip.appendMarkdown(`- Thread tokens: ${formatUsageNumber(usageData.current_thread.tokens_used)}\n`);
-        tooltip.appendMarkdown(`- Updated: ${formatTimestamp(usageData.current_thread.updated_at)}\n`);
-    } else if (usageError) {
-        tooltip.appendMarkdown(`- Local thread data unavailable: ${escapeMarkdown(getErrorMessage(usageError))}\n`);
-    } else {
-        tooltip.appendMarkdown("- No active Codex thread found\n");
+        return [
+            ["Title", trimText(usageData.current_thread.title, 100) || "Untitled"],
+            ["Model", usageData.current_thread.model || "unknown"],
+            ["Thread tokens", formatUsageNumber(usageData.current_thread.tokens_used)],
+            ["Updated", formatTimestamp(usageData.current_thread.updated_at)],
+        ];
     }
+    if (usageError) {
+        return [["Local thread data", getErrorMessage(usageError)]];
+    }
+    return [["Current thread", "No active Codex thread found"]];
+}
 
-    tooltip.appendMarkdown("\n### Latest Response\n\n");
+function getLatestResponseRows(usageData, usageError) {
     if (usageData?.latest_response) {
-        tooltip.appendMarkdown(`- Total tokens: ${formatUsageNumber(usageData.latest_response.total_tokens)}\n`);
-        tooltip.appendMarkdown(`- Input tokens: ${formatUsageNumber(usageData.latest_response.input_tokens)}\n`);
-        tooltip.appendMarkdown(`- Cached input: ${formatUsageNumber(usageData.latest_response.cached_input_tokens)}\n`);
-        tooltip.appendMarkdown(`- Output tokens: ${formatUsageNumber(usageData.latest_response.output_tokens)}\n`);
-        tooltip.appendMarkdown(`- Reasoning tokens: ${formatUsageNumber(usageData.latest_response.reasoning_tokens)}\n`);
-        tooltip.appendMarkdown(`- Timestamp: ${formatTimestamp(usageData.latest_response.timestamp)}\n`);
-    } else if (usageError) {
-        tooltip.appendMarkdown(`- Local response data unavailable: ${escapeMarkdown(getErrorMessage(usageError))}\n`);
-    } else {
-        tooltip.appendMarkdown("- No completed Codex responses found yet\n");
+        return [
+            ["Total tokens", formatUsageNumber(usageData.latest_response.total_tokens)],
+            ["Input tokens", formatUsageNumber(usageData.latest_response.input_tokens)],
+            ["Cached input", formatUsageNumber(usageData.latest_response.cached_input_tokens)],
+            ["Output tokens", formatUsageNumber(usageData.latest_response.output_tokens)],
+            ["Reasoning tokens", formatUsageNumber(usageData.latest_response.reasoning_tokens)],
+            ["Timestamp", formatTimestamp(usageData.latest_response.timestamp)],
+        ];
     }
+    if (usageError) {
+        return [["Local response data", getErrorMessage(usageError)]];
+    }
+    return [["Latest response", "No completed Codex responses found yet"]];
+}
 
-    tooltip.appendMarkdown("\n### Local Token Windows\n\n");
+function getLocalTokenWindowRows(usageData, usageError) {
     if (usageData?.windows?.five_hours && usageData?.windows?.seven_days) {
-        tooltip.appendMarkdown(`- Last 5 hours: ${formatUsageNumber(usageData.windows.five_hours.total_tokens)} across ${usageData.windows.five_hours.request_count} responses\n`);
-        tooltip.appendMarkdown(`- Last 7 days: ${formatUsageNumber(usageData.windows.seven_days.total_tokens)} across ${usageData.windows.seven_days.request_count} responses\n`);
-    } else if (usageError) {
-        tooltip.appendMarkdown(`- Local SQLite usage unavailable: ${escapeMarkdown(getErrorMessage(usageError))}\n`);
-    } else {
-        tooltip.appendMarkdown("- Local SQLite usage unavailable\n");
+        return [
+            ["Last 5 hours", `${formatUsageNumber(usageData.windows.five_hours.total_tokens)} across ${usageData.windows.five_hours.request_count} responses`],
+            ["Last 7 days", `${formatUsageNumber(usageData.windows.seven_days.total_tokens)} across ${usageData.windows.seven_days.request_count} responses`],
+        ];
     }
+    if (usageError) {
+        return [["Local SQLite usage", getErrorMessage(usageError)]];
+    }
+    return [["Local SQLite usage", "Unavailable"]];
+}
 
-    tooltip.appendMarkdown("\n> This extension reads local Codex SQLite usage and, when `auth.json` is present, the same `/wham/usage` quota endpoint the official OpenAI VS Code extension uses.\n\n");
-    tooltip.appendMarkdown("[Refresh](command:localCodexStats.refresh) | [Open Codex Folder](command:localCodexStats.openCodexFolder) | [Settings](command:workbench.action.openSettings?%22localCodexStats%22)\n");
-    return tooltip;
+function getSourceRows(authData) {
+    const rows = [["Codex home", getCodexHome()]];
+    if (authData?.accessToken) {
+        rows.push(["Remote quota endpoint", REMOTE_USAGE_URL]);
+    }
+    return rows;
 }
 
 function showFetchError(authData, usageError, remoteUsageError) {
@@ -421,18 +686,102 @@ function formatPercent(value) {
     return `${formatNumber(value)}%`;
 }
 
-function getUsageLevel(remoteUsageData) {
+function getUsageLevel(remoteUsageData, contextHealth = null) {
     const primaryPercent = Number(remoteUsageData?.rate_limit?.primary_window?.used_percent || 0);
     const secondaryPercent = Number(remoteUsageData?.rate_limit?.secondary_window?.used_percent || 0);
     const maxPercent = Math.max(primaryPercent, secondaryPercent);
+    let level = USAGE_LEVELS.healthy;
 
     if (remoteUsageData?.rate_limit?.limit_reached || remoteUsageData?.rate_limit?.allowed === false || maxPercent >= 90) {
+        level = USAGE_LEVELS.danger;
+    } else if (maxPercent >= 70) {
+        level = USAGE_LEVELS.warning;
+    }
+
+    if (contextHealth?.level?.severity > level.severity) {
+        return contextHealth.level;
+    }
+    return level;
+}
+
+function getContextHealth(usageData) {
+    const usedTokens = Number(usageData?.latest_response?.total_tokens || usageData?.latest_response?.input_tokens || 0);
+    const modelSlug = usageData?.current_thread?.model || "";
+    const metadata = loadModelContextMetadata(modelSlug);
+    if (!usedTokens || !metadata?.contextWindow) {
+        return null;
+    }
+
+    const effectivePercent = metadata.effectivePercent || 100;
+    const effectiveLimit = Math.round(metadata.contextWindow * (effectivePercent / 100));
+    if (!effectiveLimit) {
+        return null;
+    }
+
+    const percent = Math.round((usedTokens / effectiveLimit) * 100);
+    const remainingTokens = Math.max(effectiveLimit - usedTokens, 0);
+    return {
+        modelSlug,
+        usedTokens,
+        contextWindow: metadata.contextWindow,
+        effectivePercent,
+        effectiveLimit,
+        percent,
+        remainingTokens,
+        level: getContextLevel(percent),
+    };
+}
+
+function loadModelContextMetadata(modelSlug) {
+    if (!modelSlug) {
+        return null;
+    }
+
+    try {
+        const modelsPath = path.join(getCodexHome(), "models_cache.json");
+        if (!fs.existsSync(modelsPath)) {
+            return null;
+        }
+        const modelsJson = JSON.parse(fs.readFileSync(modelsPath, "utf8"));
+        const model = (modelsJson.models || []).find((entry) => entry?.slug === modelSlug);
+        if (!model) {
+            return null;
+        }
+
+        return {
+            contextWindow: Number(model.context_window || model.max_context_window || 0),
+            effectivePercent: Number(model.effective_context_window_percent || 100),
+        };
+    } catch (error) {
+        console.error("Codex Quota Stats could not read models_cache.json:", error);
+        return null;
+    }
+}
+
+function getContextLevel(percent) {
+    if (percent >= 98) {
         return USAGE_LEVELS.danger;
     }
-    if (maxPercent >= 70) {
+    if (percent >= 85) {
         return USAGE_LEVELS.warning;
     }
     return USAGE_LEVELS.healthy;
+}
+
+function formatUsageBar(percent, level, label) {
+    const width = 124;
+    const height = 8;
+    const safePercent = Math.max(0, Math.min(100, Number(percent || 0)));
+    const fillWidth = Math.round((safePercent / 100) * width);
+    const fillColor = level?.color || USAGE_LEVELS.healthy.color;
+    const svg = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+        `<rect width="${width}" height="${height}" rx="4" fill="#2d333b"/>`,
+        `<rect width="${fillWidth}" height="${height}" rx="4" fill="${fillColor}"/>`,
+        "</svg>",
+    ].join("");
+    const encodedSvg = Buffer.from(svg, "utf8").toString("base64");
+    return `<img alt="${escapeHtml(label)} ${Math.round(safePercent)}%" src="data:image/svg+xml;base64,${encodedSvg}" width="${width}" height="${height}">`;
 }
 
 function formatTimestamp(timestamp) {
@@ -499,6 +848,14 @@ function escapeMarkdown(value) {
         .replace(/\]/g, "\\]");
 }
 
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
 function maskIdentifier(value) {
     const text = String(value || "");
     if (text.length <= 8) {
@@ -521,8 +878,10 @@ module.exports = {
     activate,
     deactivate,
     _test: {
+        buildDetailedNumbersHtml,
         buildTooltip,
         fetchRemoteUsage,
+        getContextHealth,
         getCodexHome,
         httpsGetJson,
         loadAuthData,

@@ -11,8 +11,12 @@ Repository: https://github.com/eddie-givens/codex-quota-stats
 
 - compact token counts such as `42M` or `22.2K`
 - 5-hour and 7-day quota percentages in the status bar
-- green, yellow, and red usage states based on current quota pressure
+- green, yellow, and red usage states based on current quota and context pressure
 - a hover tooltip with:
+  - current context health
+  - 5-hour and 7-day quota bars
+  - a link to open detailed numbers
+- a detailed numbers panel with:
   - current thread title and model
   - latest completed response token usage
   - rolling local token totals for 5 hours and 7 days
@@ -52,6 +56,7 @@ Install from the VS Code Marketplace, or install from a `.vsix` file:
 ## Commands
 
 - `Codex Quota Stats: Refresh`
+- `Codex Quota Stats: Show Detailed Numbers`
 - `Codex Quota Stats: Open Codex Folder`
 
 ## Settings

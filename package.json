@@ -2,7 +2,7 @@
   "name": "codex-quota-stats",
   "displayName": "Codex Quota Stats",
   "description": "Shows Codex token usage plus the official 5-hour and 7-day quota windows from your Codex auth state.",
-  "version": "0.0.8",
+  "version": "0.0.12",
   "publisher": "EddieGivens",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -44,7 +44,9 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:localCodexStats.refresh",
-    "onCommand:localCodexStats.openCodexFolder"
+    "onCommand:localCodexStats.openCodexFolder",
+    "onCommand:localCodexStats.showNumbers",
+    "onCommand:localCodexStats.toggleNumbers"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -56,6 +58,10 @@
       {
         "command": "localCodexStats.openCodexFolder",
         "title": "Codex Quota Stats: Open Codex Folder"
+      },
+      {
+        "command": "localCodexStats.showNumbers",
+        "title": "Codex Quota Stats: Show Detailed Numbers"
       }
     ],
     "configuration": {
