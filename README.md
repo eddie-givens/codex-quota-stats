@@ -11,10 +11,11 @@ Repository: https://github.com/eddie-givens/codex-quota-stats
 
 - compact token counts such as `42M` or `22.2K`
 - 5-hour and 7-day quota percentages in the status bar
+- quiet background refreshes that do not flash the status bar on every update
 - green, yellow, and red usage states based on current quota and context pressure
 - a hover tooltip with:
   - current context health
-  - 5-hour and 7-day quota bars
+  - 5-hour and 7-day quota bars with reset countdowns
   - a link to open detailed numbers
 - a detailed numbers panel with:
   - current thread title and model

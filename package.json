@@ -2,7 +2,7 @@
   "name": "codex-quota-stats",
   "displayName": "Codex Quota Stats",
   "description": "Shows Codex token usage plus the official 5-hour and 7-day quota windows from your Codex auth state.",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "publisher": "EddieGivens",
   "icon": "images/icon.png",
   "license": "MIT",

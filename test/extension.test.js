@@ -197,8 +197,18 @@ test("compact tooltip shows context and quota bars with a numbers link", () => {
     assert.equal(tooltip.supportHtml, true);
     assert.match(tooltip.value, /<img alt="Context usage 30%" src="data:image\/svg\+xml;base64,/);
     assert.match(tooltip.value, /<img alt="Last 5 hours usage 42%" src="data:image\/svg\+xml;base64,/);
+    assert.match(tooltip.value, /Last 5 hours: 42% used, resets in 1h/);
+    assert.match(tooltip.value, /Last 7 days: 58% used, resets in 2d/);
     assert.match(tooltip.value, /\[Show numbers\]\(command:localCodexStats.showNumbers\)/);
     assert.doesNotMatch(tooltip.value, /Total tokens:/);
+});
+
+test("refresh start does not replace an existing status bar display with a spinner", () => {
+    const existingText = "$(circle-large-filled) $(graph) 78.1K tok | ctx 30% | 42%/58%";
+
+    const refreshDisplay = extension._test.getRefreshStartDisplay(existingText);
+
+    assert.equal(refreshDisplay, null);
 });
 
 test("tooltip stays compact after detailed numbers are requested", () => {

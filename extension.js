@@ -92,8 +92,11 @@ async function refreshStats() {
     if (!statusBarItem) {
         return;
     }
-    statusBarItem.text = "$(graph) $(sync~spin)";
-    statusBarItem.tooltip = "Refreshing Codex Quota Stats...";
+    const refreshStartDisplay = getRefreshStartDisplay(statusBarItem.text);
+    if (refreshStartDisplay) {
+        statusBarItem.text = refreshStartDisplay.text;
+        statusBarItem.tooltip = refreshStartDisplay.tooltip;
+    }
 
     try {
         const snapshot = await collectStatsSnapshot();
@@ -111,6 +114,17 @@ async function refreshStats() {
     } catch (error) {
         showUpdateError(error);
     }
+}
+
+function getRefreshStartDisplay(currentText) {
+    if (currentText) {
+        return null;
+    }
+
+    return {
+        text: "$(graph) $(sync~spin)",
+        tooltip: "Initializing Codex Quota Stats...",
+    };
 }
 
 async function collectStatsSnapshot() {
@@ -396,8 +410,8 @@ function appendQuotaSummary(tooltip, remoteUsageData, remoteUsageError, authData
     if (remoteUsageData?.rate_limit?.primary_window && remoteUsageData?.rate_limit?.secondary_window) {
         const primaryWindow = remoteUsageData.rate_limit.primary_window;
         const secondaryWindow = remoteUsageData.rate_limit.secondary_window;
-        tooltip.appendMarkdown(`- Last 5 hours: ${formatPercent(primaryWindow.used_percent)} used ${formatUsageBar(primaryWindow.used_percent, getContextLevel(primaryWindow.used_percent), "Last 5 hours usage")}\n`);
-        tooltip.appendMarkdown(`- Last 7 days: ${formatPercent(secondaryWindow.used_percent)} used ${formatUsageBar(secondaryWindow.used_percent, getContextLevel(secondaryWindow.used_percent), "Last 7 days usage")}\n`);
+        tooltip.appendMarkdown(`- Last 5 hours: ${formatPercent(primaryWindow.used_percent)} used, ${formatResetSummary(primaryWindow.reset_at, primaryWindow.reset_after_seconds)} ${formatUsageBar(primaryWindow.used_percent, getContextLevel(primaryWindow.used_percent), "Last 5 hours usage")}\n`);
+        tooltip.appendMarkdown(`- Last 7 days: ${formatPercent(secondaryWindow.used_percent)} used, ${formatResetSummary(secondaryWindow.reset_at, secondaryWindow.reset_after_seconds)} ${formatUsageBar(secondaryWindow.used_percent, getContextLevel(secondaryWindow.used_percent), "Last 7 days usage")}\n`);
         tooltip.appendMarkdown(`- Allowed: ${remoteUsageData.rate_limit.allowed ? "yes" : "no"}\n`);
     } else if (remoteUsageError) {
         tooltip.appendMarkdown(`- Remote quota data unavailable: ${escapeMarkdown(getErrorMessage(remoteUsageError))}\n`);
@@ -800,6 +814,16 @@ function formatReset(resetAtSeconds, resetAfterSeconds) {
     return `at ${atText} (${formatDuration(resetAfterSeconds)} remaining)`;
 }
 
+function formatResetSummary(resetAtSeconds, resetAfterSeconds) {
+    if (typeof resetAfterSeconds === "number") {
+        return `resets in ${formatDuration(resetAfterSeconds)}`;
+    }
+    if (resetAtSeconds) {
+        return `resets at ${formatTimestamp(resetAtSeconds)}`;
+    }
+    return "reset time unknown";
+}
+
 function formatDuration(totalSeconds) {
     if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
         return "unknown";
@@ -883,6 +907,7 @@ module.exports = {
         fetchRemoteUsage,
         getContextHealth,
         getCodexHome,
+        getRefreshStartDisplay,
         httpsGetJson,
         loadAuthData,
         readUsageSnapshot,
